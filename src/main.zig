@@ -8,7 +8,7 @@ const libsndfile = @cImport({
 });
 
 // Disable whisper log
-fn whisper_log_callback(level: c_uint, message: [*c]const u8, user_data: ?*anyopaque) callconv(.C) void {
+export fn whisper_log_callback(level: c_uint, message: [*c]const u8, user_data: ?*anyopaque) void {
     _ = level;
     _ = message;
     _ = user_data;

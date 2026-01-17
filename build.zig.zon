@@ -4,7 +4,7 @@
     .version = "0.1.0",
     .dependencies = .{
         .whisper = .{
-            .url = "git+https://github.com/ggerganov/whisper.cpp#01d3bd7d5ccd1956a7ddf1b57ee92d69f35aad93",
+            .url = "git+https://github.com/ggml-org/whisper.cpp#01d3bd7d5ccd1956a7ddf1b57ee92d69f35aad93",
             .hash = "1220c555fec26a504979f72c0586a7d9afa0497dddfc40a66a44aa9c3f44eecdf702",
         },
         .libsndfile = .{
