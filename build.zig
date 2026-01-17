@@ -77,13 +77,13 @@ pub fn build(b: *std.Build) !void {
         exe.linkFramework("Foundation");
         exe.linkFramework("Accelerate");
         exe.linkFramework("Metal");
-        exe.linkFramework("MetalKit");
-        exe.linkFramework("MetalPerformanceShaders");
+        // exe.linkFramework("MetalKit");
+        // exe.linkFramework("MetalPerformanceShaders");
 
         // Install Metal library file so GPU acceleration works
-        const install_metallib = b.addInstallFile(b.path(".zig-cache/whisper_build/bin/default.metallib"), "bin/default.metallib");
-        install_metallib.step.dependOn(&whisper_build.step);
-        exe.step.dependOn(&install_metallib.step);
+        // const install_metallib = b.addInstallFile(b.path(".zig-cache/whisper_build/bin/default.metallib"), "bin/default.metallib");
+        // install_metallib.step.dependOn(&whisper_build.step);
+        // exe.step.dependOn(&install_metallib.step);
     }
     exe.step.dependOn(&whisper_build.step);
     exe.step.dependOn(&sndfile_build.step);
@@ -173,7 +173,7 @@ fn buildWhisper(b: *std.Build, args: struct { target: std.Build.ResolvedTarget, 
 
     if (args.target.result.os.tag.isDarwin())
         whisper_configure.addArgs(&.{
-            "-DGGML_METAL_EMBED_LIBRARY=OFF",
+            "-DGGML_METAL_EMBED_LIBRARY=ON",
             "-DGGML_METAL=ON",
         })
     else

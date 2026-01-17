@@ -53,6 +53,12 @@ wget -nc https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
 ./whisper.zig
 ```
 
+Note: transform the .wav to 16K:
+
+```sh
+ffmpeg -i origin.wav -ar 16000 short.wav
+```
+
 ### Clean
 
 ```console
