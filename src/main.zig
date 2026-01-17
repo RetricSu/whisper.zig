@@ -15,7 +15,7 @@ export fn whisper_log_callback(level: c_uint, message: [*c]const u8, user_data: 
 }
 
 pub fn main() !void {
-    const model_path = "ggml-tiny.bin";
+    const model_path = "ggml-large-v3-turbo.bin";
     const wav_path = "short.wav";
     const language = "en";
 
