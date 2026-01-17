@@ -25,10 +25,12 @@ pub fn build(b: *std.Build) !void {
     // =============== Main executable ====================
     const exe = b.addExecutable(.{
         .name = "whisper.zig",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/main.zig"),
+        }),
     });
-    exe.root_module.root_source_file = b.path("src/main.zig");
     // Add whisper include path (abspath)
     exe.addIncludePath(.{
         .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
@@ -123,7 +125,7 @@ pub fn build(b: *std.Build) !void {
         exe.linkLibC();
         exe.linkSystemLibrary("Advapi32");
     } else {
-        exe.defineCMacro("_GNU_SOURCE", null);
+        exe.root_module.addCMacro("_GNU_SOURCE", "");
         exe.linkLibCpp();
     }
     b.installArtifact(exe);
