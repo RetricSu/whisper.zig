@@ -4,8 +4,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .whisper = .{
-            .url = "git+https://github.com/ggml-org/whisper.cpp#master",
-            .hash = "N-V-__8AAE36ygGAfa6duQlUSYpbAjDfl-41E5WtnebXQ1IA",
+            .url = "git+https://github.com/ggml-org/whisper.cpp#v1.8.3",
+            .hash = "N-V-__8AAPv4ygGIapPbHpYFUHlEhV1u1cyz1Mj5UHZG6eDJ",
         },
         .libsndfile = .{
             .url = "git+https://github.com/libsndfile/libsndfile#0d3f80b7394368623df558d8ba3fee6348584d4d",
