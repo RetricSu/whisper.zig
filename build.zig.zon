@@ -1,5 +1,6 @@
 .{
-    .name = "whisper.zig",
+    .fingerprint = 0x4fdc4100a999df87,
+    .name = .whisper,
     .version = "0.1.0",
     .dependencies = .{
         .whisper = .{
