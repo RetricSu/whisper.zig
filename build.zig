@@ -22,6 +22,33 @@ pub fn build(b: *std.Build) !void {
         .dep_path = sndFileLazyPath,
     });
 
+    // =============== Library module ====================
+    const whisper_module = b.addModule("whisper", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Add include paths to the module
+    whisper_module.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
+    });
+    whisper_module.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
+    });
+    whisper_module.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src", "include" }),
+    });
+    whisper_module.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
+    });
+    whisper_module.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ sndFileLazyPath.getPath(b), "include" }),
+    });
+
+    // Link the C libraries to the module
+    whisper_module.link_libc = true;
+
     // =============== Main executable ====================
     const exe = b.addExecutable(.{
         .name = "whisper.zig",
