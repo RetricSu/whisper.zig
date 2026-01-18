@@ -171,6 +171,91 @@ pub fn build(b: *std.Build) !void {
     }
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    // =============== Test executable ====================
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/root.zig"),
+        }),
+    });
+
+    // Add include paths
+    tests.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
+    });
+    tests.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
+    });
+    tests.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src", "include" }),
+    });
+    tests.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
+    });
+    tests.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ sndFileLazyPath.getPath(b), "include" }),
+    });
+
+    // Add library paths
+    if (tests.rootModuleTarget().abi == .msvc) {
+        tests.addLibraryPath(b.path(b.fmt(".zig-cache/whisper_build/src/{s}", .{switch (optimize) {
+            .Debug => "Debug",
+            else => "Release",
+        }})));
+        tests.addLibraryPath(b.path(b.fmt(".zig-cache/whisper_build/ggml/src/{s}", .{switch (optimize) {
+            .Debug => "Debug",
+            else => "Release",
+        }})));
+        tests.addLibraryPath(b.path(b.fmt(".zig-cache/libsndfile/{s}", .{switch (optimize) {
+            .Debug => "Debug",
+            else => "Release",
+        }})));
+    } else {
+        tests.addLibraryPath(b.path(".zig-cache/whisper_build/src"));
+        tests.addLibraryPath(b.path(".zig-cache/whisper_build/ggml/src"));
+        tests.addLibraryPath(b.path(".zig-cache/libsndfile"));
+    }
+
+    // Link frameworks on macOS
+    if (tests.rootModuleTarget().os.tag.isDarwin()) {
+        tests.linkFramework("Foundation");
+        tests.linkFramework("Accelerate");
+        tests.linkFramework("Metal");
+    }
+
+    tests.step.dependOn(&whisper_build.step);
+    tests.step.dependOn(&sndfile_build.step);
+
+    // Link libraries
+    if (tests.rootModuleTarget().os.tag != .windows) {
+        tests.linkSystemLibrary("sndfile");
+        tests.linkSystemLibrary("whisper");
+        tests.linkSystemLibrary("ggml");
+    } else {
+        tests.linkSystemLibrary2("sndfile", .{
+            .use_pkg_config = .no,
+        });
+        tests.linkSystemLibrary2("whisper", .{
+            .use_pkg_config = .no,
+        });
+        tests.linkSystemLibrary2("ggml", .{
+            .use_pkg_config = .no,
+        });
+    }
+
+    if (tests.rootModuleTarget().abi == .msvc) {
+        tests.linkLibC();
+        tests.linkSystemLibrary("Advapi32");
+    } else {
+        tests.root_module.addCMacro("_GNU_SOURCE", "");
+        tests.linkLibCpp();
+    }
+
+    const test_step = b.step("test", "Run unit tests");
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }
 
 fn buildWhisper(b: *std.Build, args: struct { target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, dep_path: std.Build.LazyPath, enable_vulkan: bool }) *std.Build.Step.Run {

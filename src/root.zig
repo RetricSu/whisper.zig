@@ -87,12 +87,12 @@ pub fn get_text_from_samples(allocator: std.mem.Allocator, model_path: []const u
         std.debug.print("failed to call whisper_full\n", .{});
     }
 
-    var string_list = std.ArrayList([]const u8).init(allocator);
+    var string_list = try std.ArrayList([]const u8).initCapacity(allocator, 8);
     // If we fail partway through, we need to decide if we free what we have
     // or return the error. Usually, on error, we clean up.
     errdefer {
         for (string_list.items) |str| allocator.free(str);
-        string_list.deinit();
+        string_list.deinit(allocator);
     }
 
     const n_segments: i32 = whisper.whisper_full_n_segments(ctx);
@@ -101,8 +101,36 @@ pub fn get_text_from_samples(allocator: std.mem.Allocator, model_path: []const u
         std.debug.print("{s}\n", .{raw_text});
         const text_slice = std.mem.span(raw_text);
         const owned_text = try allocator.dupe(u8, text_slice);
-        try string_list.append(owned_text);
+        try string_list.append(allocator, owned_text);
     }
 
     return string_list;
+}
+
+test "get_text_from_wav" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const params = GetTextParams{
+        .allocator = allocator,
+        .file_path = "model/short.wav",
+        .model_path = "model/ggml-tiny.bin",
+        .n_threads = 4,
+        .use_gpu = true,
+    };
+
+    var result = try get_text_from_wav(params);
+    defer {
+        for (result.items) |str| allocator.free(str);
+        result.deinit(allocator);
+    }
+
+    // Verify we got some text back
+    try testing.expect(result.items.len > 0);
+
+    // Print the transcribed text for manual verification
+    std.debug.print("\nTranscribed text:\n", .{});
+    for (result.items) |segment| {
+        std.debug.print("  {s}\n", .{segment});
+    }
 }
