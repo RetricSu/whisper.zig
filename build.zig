@@ -25,9 +25,11 @@ pub fn build(b: *std.Build) !void {
     // =============== Main executable ====================
     const exe = b.addExecutable(.{
         .name = "whisper.zig",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/main.zig"),
+        }),
     });
     // Add whisper include path (abspath)
     exe.addIncludePath(.{
@@ -71,10 +73,17 @@ pub fn build(b: *std.Build) !void {
         exe.addLibraryPath(b.path(".zig-cache/libsndfile"));
     }
 
-    if (exe.rootModuleTarget().isDarwin()) {
+    if (exe.rootModuleTarget().os.tag.isDarwin()) {
         exe.linkFramework("Foundation");
         exe.linkFramework("Accelerate");
         exe.linkFramework("Metal");
+        // exe.linkFramework("MetalKit");
+        // exe.linkFramework("MetalPerformanceShaders");
+
+        // Install Metal library file so GPU acceleration works
+        // const install_metallib = b.addInstallFile(b.path(".zig-cache/whisper_build/bin/default.metallib"), "bin/default.metallib");
+        // install_metallib.step.dependOn(&whisper_build.step);
+        // exe.step.dependOn(&install_metallib.step);
     }
     exe.step.dependOn(&whisper_build.step);
     exe.step.dependOn(&sndfile_build.step);
@@ -123,7 +132,7 @@ pub fn build(b: *std.Build) !void {
         exe.linkLibC();
         exe.linkSystemLibrary("Advapi32");
     } else {
-        exe.defineCMacro("_GNU_SOURCE", null);
+        exe.root_module.addCMacro("_GNU_SOURCE", "");
         exe.linkLibCpp();
     }
     b.installArtifact(exe);
@@ -162,9 +171,9 @@ fn buildWhisper(b: *std.Build, args: struct { target: std.Build.ResolvedTarget, 
         whisper_configure.addArgs(&.{"-DGGML_VULKAN=ON"});
     }
 
-    if (args.target.result.isDarwin())
+    if (args.target.result.os.tag.isDarwin())
         whisper_configure.addArgs(&.{
-            "-DGGML_METAL_EMBED_LIBRARY=OFF",
+            "-DGGML_METAL_EMBED_LIBRARY=ON",
             "-DGGML_METAL=ON",
         })
     else
