@@ -22,8 +22,12 @@ pub fn get_text_from_wav(params: GetTextParams) !std.ArrayList([]const u8) {
     const use_gpu = params.use_gpu;
     const n_threads = params.n_threads;
 
+    // C functions need null-terminated strings
+    const file_path_z = try allocator.dupeZ(u8, file_path);
+    defer allocator.free(file_path_z);
+
     var sfInfo: libsndfile.SF_INFO = .{};
-    const file = libsndfile.sf_open(file_path, libsndfile.SFM_READ, &sfInfo);
+    const file = libsndfile.sf_open(file_path_z, libsndfile.SFM_READ, &sfInfo);
     if (file == null) {
         std.debug.print("Could not open wav file\n", .{});
         return error.FileOpenFailed;
@@ -55,11 +59,15 @@ pub fn get_text_from_wav(params: GetTextParams) !std.ArrayList([]const u8) {
 }
 
 pub fn get_text_from_samples(allocator: std.mem.Allocator, model_path: []const u8, samples: []f32, n_threads: u32, use_gpu: bool) !std.ArrayList([]const u8) {
+    // C functions need null-terminated strings
+    const model_path_z = try allocator.dupeZ(u8, model_path);
+    defer allocator.free(model_path_z);
+
     // Configure Context
     var cparams: whisper.whisper_context_params = whisper.whisper_context_default_params();
     cparams.use_gpu = use_gpu; // <--- FORCE METAL GPU USAGE
 
-    const ctx = whisper.whisper_init_from_file_with_params(model_path, cparams);
+    const ctx = whisper.whisper_init_from_file_with_params(model_path_z, cparams);
     if (ctx == null) {
         std.debug.print("Failed to create whisper context\n", .{});
         std.process.exit(1);
@@ -67,7 +75,7 @@ pub fn get_text_from_samples(allocator: std.mem.Allocator, model_path: []const u
     defer whisper.whisper_free(ctx);
 
     var fparams = whisper.whisper_full_default_params(whisper.WHISPER_SAMPLING_GREEDY);
-    fparams.n_threads = n_threads;
+    fparams.n_threads = @intCast(n_threads);
     fparams.print_realtime = false;
     fparams.print_progress = false;
     fparams.no_timestamps = true;
