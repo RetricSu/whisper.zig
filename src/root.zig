@@ -51,6 +51,10 @@ pub fn get_text_from_wav(params: GetTextParams) !std.ArrayList([]const u8) {
         return error.FileReadFailed;
     }
 
+    return get_text_from_samples(allocator, model_path, samples, n_threads, use_gpu);
+}
+
+pub fn get_text_from_samples(allocator: std.mem.Allocator, model_path: []const u8, samples: []f32, n_threads: u32, use_gpu: bool) !std.ArrayList([]const u8) {
     // Configure Context
     var cparams: whisper.whisper_context_params = whisper.whisper_context_default_params();
     cparams.use_gpu = use_gpu; // <--- FORCE METAL GPU USAGE
@@ -67,6 +71,8 @@ pub fn get_text_from_wav(params: GetTextParams) !std.ArrayList([]const u8) {
     fparams.print_realtime = false;
     fparams.print_progress = false;
     fparams.no_timestamps = true;
+
+    const n_samples: usize = samples.len;
 
     // Run
     if (whisper.whisper_full(ctx, fparams, samples.ptr, @intCast(n_samples)) != 0) {
