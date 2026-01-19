@@ -7,10 +7,6 @@
             .url = "git+https://github.com/ggml-org/whisper.cpp#v1.8.3",
             .hash = "N-V-__8AAPv4ygGIapPbHpYFUHlEhV1u1cyz1Mj5UHZG6eDJ",
         },
-        .libsndfile = .{
-            .url = "git+https://github.com/libsndfile/libsndfile#0d3f80b7394368623df558d8ba3fee6348584d4d",
-            .hash = "12205cebfa8a6dd8005c33000d86b6751ace4b4d2ec66b100a000b98ae88c2e7dd38",
-        },
     },
     .paths = .{
         "build.zig",
