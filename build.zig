@@ -62,6 +62,9 @@ pub fn build(b: *std.Build) !void {
     const lib_install = b.addInstallArtifact(whisper_lib.artifact, .{});
     const lib_step = b.step("lib", "Build the static library");
     lib_step.dependOn(&lib_install.step);
+
+    // Also install library by default so downstream can access via artifact("whisper")
+    b.installArtifact(whisper_lib.artifact);
 }
 
 /// Build whisper library - can be called by downstream dependencies
@@ -84,7 +87,7 @@ pub fn buildWhisperLib(
 
     // Create the Zig library that wraps whisper
     const lib = b.addLibrary(.{
-        .name = "whisper.zig",
+        .name = "whisper",
         .linkage = .static,
         .root_module = b.createModule(.{
             .target = target,
