@@ -1,38 +1,17 @@
 const std = @import("std");
 
+/// Whisper library artifact with module - for use by downstream dependencies
+pub const WhisperLib = struct {
+    artifact: *std.Build.Step.Compile,
+    module: *std.Build.Module,
+};
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // rootpath from zig-package (zig GLOBAL_CACHE_DIR)
-    const whisperLazyPath = b.dependency("whisper", .{}).path("");
-
-    // =============== Whisper library (built via CMake) ====================
-    const whisper_build = buildWhisper(b, .{
-        .target = target,
-        .optimize = optimize,
-        .dep_path = whisperLazyPath,
-    });
-
-    // =============== Library module ====================
-    const whisper_module = b.addModule("whisper", .{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // Add include paths to the module
-    whisper_module.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
-    });
-    whisper_module.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
-    });
-    whisper_module.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
-    });
-
-    whisper_module.link_libc = true;
+    // Build whisper and get the linkable artifact
+    const whisper_lib = buildWhisperLib(b, target, optimize);
 
     // =============== Main executable ====================
     const exe = b.addExecutable(.{
@@ -44,37 +23,9 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
-    // Add whisper include path (abspath)
-    exe.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
-    });
-    exe.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
-    });
-    exe.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
-    });
-
-    // cmake build path
-    exe.addLibraryPath(b.path(".zig-cache/whisper_build/src"));
-    exe.addLibraryPath(b.path(".zig-cache/whisper_build/ggml/src"));
-
-    if (exe.rootModuleTarget().os.tag.isDarwin()) {
-        exe.linkFramework("Foundation");
-        exe.linkFramework("Accelerate");
-        exe.linkFramework("Metal");
-    }
-
-    exe.step.dependOn(&whisper_build.step);
-
-    exe.linkSystemLibrary("whisper");
-    exe.linkSystemLibrary("ggml");
-
-    exe.root_module.addCMacro("_GNU_SOURCE", "");
-    exe.linkLibCpp();
-
-    // Add whisper module import
-    exe.root_module.addImport("whisper", whisper_module);
+    // Link whisper
+    exe.root_module.addImport("whisper", whisper_lib.module);
+    exe.linkLibrary(whisper_lib.artifact);
 
     b.installArtifact(exe);
 
@@ -86,7 +37,8 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // =============== Test executable ====================
+    // =============== Test ====================
+    const whisper_dep = b.dependency("whisper", .{});
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
             .target = target,
@@ -95,42 +47,42 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
-    // Add include paths
-    tests.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
-    });
-    tests.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
-    });
-    tests.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
-    });
+    // Add include paths for tests
+    tests.addIncludePath(whisper_dep.path("include"));
+    tests.addIncludePath(whisper_dep.path("ggml/include"));
+    tests.addIncludePath(whisper_dep.path("src"));
 
-    // Add library paths
-    tests.addLibraryPath(b.path(".zig-cache/whisper_build/src"));
-    tests.addLibraryPath(b.path(".zig-cache/whisper_build/ggml/src"));
-
-    // Link frameworks on macOS
-    if (tests.rootModuleTarget().os.tag.isDarwin()) {
-        tests.linkFramework("Foundation");
-        tests.linkFramework("Accelerate");
-        tests.linkFramework("Metal");
-    }
-
-    tests.step.dependOn(&whisper_build.step);
-
-    // Link libraries
-    tests.linkSystemLibrary("whisper");
-    tests.linkSystemLibrary("ggml");
-
-    tests.root_module.addCMacro("_GNU_SOURCE", "");
-    tests.linkLibCpp();
+    tests.linkLibrary(whisper_lib.artifact);
 
     const test_step = b.step("test", "Run unit tests");
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
 
-    // =============== Static library ====================
+    // =============== Static library (for local install) ====================
+    const lib_install = b.addInstallArtifact(whisper_lib.artifact, .{});
+    const lib_step = b.step("lib", "Build the static library");
+    lib_step.dependOn(&lib_install.step);
+}
+
+/// Build whisper library - can be called by downstream dependencies
+/// Usage in downstream build.zig:
+///   const whisper_dep = b.dependency("whisper_zig", .{ .target = target, .optimize = optimize });
+///   const whisper_lib = @import("whisper_zig").buildWhisperLib(b, target, optimize);
+///   exe.root_module.addImport("whisper", whisper_lib.module);
+///   exe.linkLibrary(whisper_lib.artifact);
+pub fn buildWhisperLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) WhisperLib {
+    // Get whisper.cpp source from dependency
+    const whisper_dep = b.dependency("whisper", .{});
+    const whisper_path = whisper_dep.path("").getPath(b);
+
+    // Run CMake to build whisper.cpp
+    const cmake_build = runCMakeBuild(b, target, optimize, whisper_path);
+
+    // Create the Zig library that wraps whisper
     const lib = b.addLibrary(.{
         .name = "whisper.zig",
         .linkage = .static,
@@ -141,48 +93,61 @@ pub fn build(b: *std.Build) !void {
         }),
     });
 
-    // Add include paths
-    lib.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "include" }),
-    });
-    lib.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "ggml", "include" }),
-    });
-    lib.addIncludePath(.{
-        .cwd_relative = b.pathJoin(&.{ whisperLazyPath.getPath(b), "src" }),
-    });
+    // Add whisper include paths
+    lib.addIncludePath(whisper_dep.path("include"));
+    lib.addIncludePath(whisper_dep.path("ggml/include"));
+    lib.addIncludePath(whisper_dep.path("src"));
 
-    // Add library paths
-    lib.addLibraryPath(b.path(".zig-cache/whisper_build/src"));
-    lib.addLibraryPath(b.path(".zig-cache/whisper_build/ggml/src"));
+    // Add CMake build output paths - link the static libraries directly
+    lib.addObjectFile(b.path(".zig-cache/whisper_build/src/libwhisper.a"));
+    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml.a"));
+    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml-base.a"));
+    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml-cpu.a"));
 
-    // Link frameworks on macOS
-    if (lib.rootModuleTarget().os.tag.isDarwin()) {
+    // macOS-specific static libraries
+    if (target.result.os.tag.isDarwin()) {
+        lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/ggml-metal/libggml-metal.a"));
+        lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/ggml-blas/libggml-blas.a"));
+    }
+
+    // Link platform-specific dependencies
+    if (target.result.os.tag.isDarwin()) {
         lib.linkFramework("Foundation");
         lib.linkFramework("Accelerate");
         lib.linkFramework("Metal");
     }
 
-    lib.step.dependOn(&whisper_build.step);
-
-    lib.linkSystemLibrary("whisper");
-    lib.linkSystemLibrary("ggml");
-
     lib.root_module.addCMacro("_GNU_SOURCE", "");
     lib.linkLibCpp();
 
-    const lib_install = b.addInstallArtifact(lib, .{});
-    const lib_step = b.step("lib", "Build the static library");
-    lib_step.dependOn(&lib_install.step);
+    // Ensure CMake build runs first
+    lib.step.dependOn(&cmake_build.step);
+
+    // Create the module for importing
+    const module = b.addModule("whisper", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    module.addIncludePath(whisper_dep.path("include"));
+    module.addIncludePath(whisper_dep.path("ggml/include"));
+    module.addIncludePath(whisper_dep.path("src"));
+    module.link_libc = true;
+
+    return .{
+        .artifact = lib,
+        .module = module,
+    };
 }
 
-fn buildWhisper(b: *std.Build, args: struct {
+fn runCMakeBuild(
+    b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    dep_path: std.Build.LazyPath,
-}) *std.Build.Step.Run {
-    const whisper_path = args.dep_path.getPath(b);
-    const whisper_configure = b.addSystemCommand(&.{
+    whisper_path: []const u8,
+) *std.Build.Step.Run {
+    const cmake_configure = b.addSystemCommand(&.{
         "cmake",
         "-G",
         "Ninja",
@@ -190,33 +155,36 @@ fn buildWhisper(b: *std.Build, args: struct {
         ".zig-cache/whisper_build",
         "-S",
         whisper_path,
-        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{switch (args.optimize) {
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{switch (optimize) {
             .Debug => "Debug",
             .ReleaseFast => "Release",
             .ReleaseSafe => "RelWithDebInfo",
             .ReleaseSmall => "MinSizeRel",
         }}),
+        "-DBUILD_SHARED_LIBS=OFF",
         "-DGGML_OPENMP=OFF",
         "-DWHISPER_BUILD_EXAMPLES=OFF",
         "-DWHISPER_BUILD_TESTS=OFF",
     });
 
-    if (args.target.result.os.tag.isDarwin())
-        whisper_configure.addArgs(&.{
+    if (target.result.os.tag.isDarwin()) {
+        cmake_configure.addArgs(&.{
             "-DGGML_METAL_EMBED_LIBRARY=ON",
             "-DGGML_METAL=ON",
-        })
-    else
-        whisper_configure.addArgs(&.{
+        });
+    } else {
+        cmake_configure.addArgs(&.{
             "-DGGML_METAL_EMBED_LIBRARY=OFF",
             "-DGGML_METAL=OFF",
         });
+    }
 
-    const whisper_build = b.addSystemCommand(&.{
+    const cmake_build = b.addSystemCommand(&.{
         "cmake",
         "--build",
         ".zig-cache/whisper_build",
     });
-    whisper_build.step.dependOn(&whisper_configure.step);
-    return whisper_build;
+    cmake_build.step.dependOn(&cmake_configure.step);
+
+    return cmake_build;
 }
