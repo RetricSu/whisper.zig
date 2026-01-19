@@ -82,8 +82,12 @@ pub fn buildWhisperLib(
     const whisper_dep = b.dependency("whisper", .{});
     const whisper_path = whisper_dep.path("").getPath(b);
 
+    // Get the cache root path (this is the downstream project's .zig-cache)
+    const cache_root = b.cache_root.path orelse ".zig-cache";
+    const whisper_build_dir = b.fmt("{s}/whisper_build", .{cache_root});
+
     // Run CMake to build whisper.cpp
-    const cmake_build = runCMakeBuild(b, target, optimize, whisper_path);
+    const cmake_build = runCMakeBuild(b, target, optimize, whisper_path, whisper_build_dir);
 
     // Create the Zig library that wraps whisper
     const lib = b.addLibrary(.{
@@ -101,16 +105,16 @@ pub fn buildWhisperLib(
     lib.addIncludePath(whisper_dep.path("ggml/include"));
     lib.addIncludePath(whisper_dep.path("src"));
 
-    // Add CMake build output paths - link the static libraries directly
-    lib.addObjectFile(b.path(".zig-cache/whisper_build/src/libwhisper.a"));
-    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml.a"));
-    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml-base.a"));
-    lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/libggml-cpu.a"));
+    // Add CMake build output paths - link the static libraries directly (use absolute paths)
+    lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/src/libwhisper.a", .{whisper_build_dir}) });
+    lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/ggml/src/libggml.a", .{whisper_build_dir}) });
+    lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/ggml/src/libggml-base.a", .{whisper_build_dir}) });
+    lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/ggml/src/libggml-cpu.a", .{whisper_build_dir}) });
 
     // macOS-specific static libraries
     if (target.result.os.tag.isDarwin()) {
-        lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/ggml-metal/libggml-metal.a"));
-        lib.addObjectFile(b.path(".zig-cache/whisper_build/ggml/src/ggml-blas/libggml-blas.a"));
+        lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/ggml/src/ggml-metal/libggml-metal.a", .{whisper_build_dir}) });
+        lib.addObjectFile(.{ .cwd_relative = b.fmt("{s}/ggml/src/ggml-blas/libggml-blas.a", .{whisper_build_dir}) });
     }
 
     // Link platform-specific dependencies
@@ -149,13 +153,14 @@ fn runCMakeBuild(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     whisper_path: []const u8,
+    build_dir: []const u8,
 ) *std.Build.Step.Run {
     const cmake_configure = b.addSystemCommand(&.{
         "cmake",
         "-G",
         "Ninja",
         "-B",
-        ".zig-cache/whisper_build",
+        build_dir,
         "-S",
         whisper_path,
         b.fmt("-DCMAKE_BUILD_TYPE={s}", .{switch (optimize) {
@@ -185,7 +190,7 @@ fn runCMakeBuild(
     const cmake_build = b.addSystemCommand(&.{
         "cmake",
         "--build",
-        ".zig-cache/whisper_build",
+        build_dir,
     });
     cmake_build.step.dependOn(&cmake_configure.step);
 
